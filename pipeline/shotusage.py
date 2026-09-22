@@ -63,8 +63,6 @@ def get_teamseason_shot_events(comp_id, season_id, team_id):
     comp_id: StatsBomb competition ID
     season_id: StatsBomb season ID
     team_id: StatsBomb team ID
-    
-    This is one of the main pipeline functions
 
     Note - This function only works for league matches, waiting on get_shots_from_timeline to be adapted for knockout matches
 
@@ -121,7 +119,7 @@ def get_playerusage(shotevents_df, player_id, player_name):
     player_shots_df: Dataframe of all shots taken by the player over the season.
 
     Note - The returned dataframes are filtered to only include events where the team was playing with 11 players on the field.
-           Will break this down into separate functions for each output.
+           Will be replaced by two functions that return the each dataframe; this is a temporary solution to get the player usage metric.
 
     """
     # proccessedshots_df is a list of tuples with a dataframe of shot events linked to a unique team sheet
