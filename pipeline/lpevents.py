@@ -1,8 +1,10 @@
 """Lineup Event Processing for StatsBomb data."""
  
 import numpy as np  # noqa: F401
-import pandas as pd  # noqa: F401
+import pandas as pd
 from statsbombpy import sb
+
+from pipeline.utils import get_match_events, get_team_matchids
 
 
 def get_teamsheet(lineup):
@@ -18,6 +20,7 @@ def get_teamsheet(lineup):
     for player in lineup['lineup']:
         player_data.add((str(player['player']['id']), player['player']['name']))
     return frozenset(player_data)
+
 
 def sub_teamsheet(lineup, subin_id, subin_name, subout_id, subout_name):
     """Return frozenset representing a teamsheet after a substitution.
@@ -35,6 +38,7 @@ def sub_teamsheet(lineup, subin_id, subin_name, subout_id, subout_name):
     mut_lineup.add((str(int(subin_id)), subin_name))
     return frozenset(mut_lineup)
 
+
 def playeroff_teamsheet(lineup, out_id, out_name):
     """Return frozenset representing a teamsheet after a player is substituted off.
 
@@ -47,6 +51,7 @@ def playeroff_teamsheet(lineup, out_id, out_name):
     mut_lineup = set(lineup)
     mut_lineup.remove((str(int(out_id)), out_name))
     return frozenset(mut_lineup)
+
 
 def playeron_teamsheet(lineup, on_id, on_name):
     """Return frozenset representing a teamsheet after a player is substituted on.
@@ -61,6 +66,7 @@ def playeron_teamsheet(lineup, on_id, on_name):
     mut_lineup.add((str(int(on_id)), on_name))
     return frozenset(mut_lineup)
 
+
 def mandown_teamsheet(lineup):
     """Return boolean indicating if a teamsheet has fewer than 11 players.
 
@@ -70,6 +76,8 @@ def mandown_teamsheet(lineup):
     """
     return len(lineup) < 11
 
+
+# see if vectorising is an option for this function
 def get_lineup_events(team_id, match_id):
     """Return dataframe, given a team and match, with teamsheet change events for that team and match.
     
@@ -144,3 +152,100 @@ def get_lineup_events(team_id, match_id):
                          'timestamp', 'type', 'teamsheet', 'mandown']
 
     return filtered_df[columns_to_retain].reset_index(drop=True)
+
+
+def get_uniquelineups(matchevents_df):  # noqa D103
+    unique_lineups = matchevents_df['teamsheet'].unique()
+
+    lineup_df= []
+    for idx, l_key in enumerate(unique_lineups):
+        subset_df = matchevents_df[matchevents_df['teamsheet'] == l_key].copy()
+        lineup_df.append([subset_df, l_key])
+
+    return lineup_df
+
+
+def get_allfeaturedplayers(matchevents_df):  # noqa D103
+    unique_lineups = matchevents_df['teamsheet'].unique()
+
+    listoflineups = list(unique_lineups)
+    return frozenset().union(*listoflineups)
+
+
+# need to vectorise
+def get_events_from_timeline(team_id, match_id, events):
+    """Return dataframe of specified events for a given team and match attached with teamsheet and mandown information for each shot.
+    
+    Arguments:
+    team_id: StatsBomb team ID
+    match_id: StatsBomb match ID
+    events: List of StatsBomb match event types
+
+    Note - This function only works for league matches, need to implement check for knockout matches
+
+    """
+    # initialise event and lineup events for the given team and match
+    events_df = get_match_events(team_id, match_id, events)
+    events_df = events_df.sort_values(by=['period', 'timestamp']).reset_index(drop=True)
+    lineup_events = get_lineup_events(team_id, match_id)
+
+    # match each event with the teamsheet and mandown state at the time of the event
+    event_teamsheets = []
+    event_mandown = []
+    for idx, event in events_df.iterrows():
+        event_period = event['period']
+        event_time = event['timestamp']
+
+        # we get a list of lineup events occuring before the events, within the same game period
+        # the game period corresponds to game halves
+        #
+        # if there are no lineup events, occuring before the event, check the previous period
+        # since we only consider league matches, there is always a starting lineup event, so we
+        # will always find a corresponding teamsheet in the previous period (which can only ever
+        # be the first half)
+        past_events = lineup_events[
+            (lineup_events['period'] == event_period) &
+            (lineup_events['timestamp'] <= event_time)
+        ]
+
+        if len(past_events) > 0:
+            active_state = past_events.iloc[-1]
+        else:
+            active_state = lineup_events[(lineup_events['period'] == event_period - 1)].iloc[-1]
+
+        event_teamsheets.append(active_state['teamsheet'])
+        event_mandown.append(active_state['mandown'])
+
+    events_df['teamsheet'] = event_teamsheets
+    events_df['mandown'] = event_mandown
+
+    return events_df.dropna(axis = 1, how = 'all')
+
+
+def get_teamseason_matchevents(comp_id, season_id, team_id, events):
+    """Return dataframe of events with teamsheets attached for a given team over a season.
+    
+    Arguments:
+    comp_id: StatsBomb competition ID
+    season_id: StatsBomb season ID
+    team_id: StatsBomb team ID
+    events: List of StatsBomb match event types
+
+    Note - This function only works for league matches, waiting on get_events_from_timeline to be adapted for knockout matches
+
+    """
+    # get list of match IDs for the team over the season
+    team_matchids = get_team_matchids(comp_id, season_id, team_id)
+
+    games = len(team_matchids)
+    print(f'Found {games} games for the season')
+
+    # get shot events with teamsheets for the first game, which serves as initial dataframe for concatenation
+    team_events = get_events_from_timeline(team_id, team_matchids[0], events)
+    print(f'Processed match event data for game 1/{games}')
+
+    # concatenating shot events with teamsheets for the other games played in the season
+    for id_x, id_game in enumerate(team_matchids[1:]):
+        team_events = pd.concat([team_events, get_events_from_timeline(team_id, id_game, events)])
+        print(f'Processed match event data for game {id_x + 2}/{games}')
+    return team_events

@@ -1,8 +1,7 @@
 """Public pipeline functions for shot distribution prediction."""
 
-from pipeline.lpevents import get_lineup_events
+from pipeline.lpevents import get_allfeaturedplayers, get_lineup_events
 from pipeline.shotusage import (
-                                get_allfeaturedplayers,
                                 get_playerusage,
                                 get_shots_from_timeline,
                                 get_teamseason_shot_events,

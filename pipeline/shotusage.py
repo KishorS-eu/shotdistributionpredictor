@@ -2,10 +2,10 @@
 
 import numpy as np
 import pandas as pd
-from statsbombpy import sb
+from statsbombpy import sb  # noqa: F401
 
-from pipeline.lpevents import get_lineup_events
-from pipeline.utils import get_team_matchids
+from pipeline.lpevents import get_lineup_events, get_uniquelineups
+from pipeline.utils import get_match_events, get_team_matchids
 
 
 def get_shots_from_timeline(team_id, match_id):
@@ -19,8 +19,7 @@ def get_shots_from_timeline(team_id, match_id):
 
     """
     # initialise shot and lineup events for the given team and match
-    events = sb.events(match_id = match_id)
-    shots_df = events[(events['type'] == 'Shot') & (events['team_id'] == team_id)].copy()
+    shots_df = get_match_events(team_id, match_id, ['Shot'])
     shots_df = shots_df.sort_values(by=['period', 'timestamp']).reset_index(drop=True)
     lineup_events = get_lineup_events(team_id, match_id)
 
@@ -82,24 +81,6 @@ def get_teamseason_shot_events(comp_id, season_id, team_id):
         team_shot_events = pd.concat([team_shot_events, get_shots_from_timeline(team_id, id_game)])
         print(f'Processed shot event data for game {id_x + 2}/{games}')
     return team_shot_events
-
-# adapt this for lineup events
-def get_uniquelineups(shotevents_df):  # noqa D103
-    unique_lineups = shotevents_df['teamsheet'].unique()
-
-    lineup_df= []
-    for idx, l_key in enumerate(unique_lineups):
-        subset_df = shotevents_df[shotevents_df['teamsheet'] == l_key].copy()
-        lineup_df.append([subset_df, l_key])
-
-    return lineup_df
-
-# adapt this for lineup events
-def get_allfeaturedplayers(shotevents_df):  # noqa D103
-    unique_lineups = shotevents_df['teamsheet'].unique()
-
-    listoflineups = list(unique_lineups)
-    return frozenset().union(*listoflineups)
 
 def get_playerusage(shotevents_df, player_id, player_name):
     """Return a list of shot stats, including player usage, and associated dataframes for a given player over a season.

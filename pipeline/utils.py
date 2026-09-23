@@ -40,3 +40,16 @@ def get_team_matchids(comp_id, season_id, team_id):
                                       == team_id)]
                     .reset_index(drop=True))
     return team_matches['match_id'].to_list()
+
+
+def get_match_events(team_id, match_id, events):
+    """Return dataframe of given events for a given team and match.
+    
+    Arguments:
+    team_id: StatsBomb team ID
+    match_id: StatsBomb match ID
+    events: List of StatsBomb match event types
+
+    """
+    matchevents = sb.events(match_id = match_id)
+    return matchevents[matchevents['type'].isin(events) & (matchevents['team_id'] == team_id)]
