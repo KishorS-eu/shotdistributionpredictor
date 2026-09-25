@@ -1,4 +1,4 @@
-"""Shot Usage metrics derived from StatsBomb event data."""
+"""Shot Usage metrics derived from StatsBomb event data - deprecated for now."""
 
 import numpy as np
 import pandas as pd
